@@ -106,5 +106,7 @@ modrinth {
     uploadFile.set(tasks.shadowJar.flatMap { it.archiveFile })
     gameVersions.set(resolvedGameVersions())
     loaders.set(listOf("velocity"))
-    syncBodyFrom.set(rootProject.file("README.md"))
+    syncBodyFrom.set(
+        providers.fileContents(rootProject.layout.projectDirectory.file("README.md")).asText
+    )
 }
