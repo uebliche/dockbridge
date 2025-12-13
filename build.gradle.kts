@@ -30,17 +30,6 @@ private val fallbackGameVersions = listOf(
     "1.21.1"
 )
 
-private fun versionAtLeast(version: String, floor: List<Int>): Boolean {
-    val parts = version.split(".").mapNotNull { it.toIntOrNull() }
-    val maxSize = maxOf(parts.size, floor.size)
-    for (i in 0 until maxSize) {
-        val current = parts.getOrElse(i) { 0 }
-        val min = floor.getOrElse(i) { 0 }
-        if (current != min) return current > min
-    }
-    return true
-}
-
 private fun resolvedGameVersions(): List<String> {
     val override = System.getenv("MODRINTH_GAME_VERSIONS")
         ?.split(",")
@@ -49,16 +38,15 @@ private fun resolvedGameVersions(): List<String> {
     if (!override.isNullOrEmpty()) return override
 
     return try {
-        val manifest = URL("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json")
-            .openStream().use { JsonSlurper().parse(it) as Map<*, *> }
-        val versions = manifest["versions"] as? List<*> ?: return fallbackGameVersions
-        val floor = listOf(1, 19, 4)
-        versions.asSequence()
-            .mapNotNull { it as? Map<*, *> }
-            .filter { it["type"] == "release" }
-            .mapNotNull { it["id"] as? String }
-            .filter { versionAtLeast(it, floor) }
-            .toList()
+        val connection = URL("https://api.modrinth.com/v2/tag/game_version").openConnection()
+        connection.connectTimeout = 5000
+        connection.readTimeout = 5000
+        connection.getInputStream().use { stream ->
+            val parsed = JsonSlurper().parse(stream) as? List<*> ?: return fallbackGameVersions
+            parsed.mapNotNull { (it as? Map<*, *>)?.get("version") as? String }
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
             .ifEmpty { fallbackGameVersions }
     } catch (e: Exception) {
         logger.warn("Falling back to static MC versions for Modrinth: ${e.message}")
