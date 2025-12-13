@@ -17,19 +17,6 @@ val pluginVersion: String = System.getenv("DOCKBRIDGE_VERSION")
 version = pluginVersion
 buildDir = file("/tmp/dockbridge-build")
 
-private val fallbackGameVersions = listOf(
-    "1.19.4",
-    "1.20",
-    "1.20.1",
-    "1.20.2",
-    "1.20.3",
-    "1.20.4",
-    "1.20.5",
-    "1.20.6",
-    "1.21",
-    "1.21.1"
-)
-
 private fun resolvedGameVersions(): List<String> {
     val override = System.getenv("MODRINTH_GAME_VERSIONS")
         ?.split(",")
@@ -42,15 +29,15 @@ private fun resolvedGameVersions(): List<String> {
         connection.connectTimeout = 5000
         connection.readTimeout = 5000
         connection.getInputStream().use { stream ->
-            val parsed = JsonSlurper().parse(stream) as? List<*> ?: return fallbackGameVersions
+            val parsed = JsonSlurper().parse(stream) as? List<*> ?: return emptyList()
             parsed.mapNotNull { (it as? Map<*, *>)?.get("version") as? String }
                 .filter { it.isNotBlank() }
                 .distinct()
         }
-            .ifEmpty { fallbackGameVersions }
+            .ifEmpty { emptyList() }
     } catch (e: Exception) {
-        logger.warn("Falling back to static MC versions for Modrinth: ${e.message}")
-        fallbackGameVersions
+        logger.warn("Failed to resolve MC versions from Modrinth: ${e.message}")
+        emptyList()
     }
 }
 
