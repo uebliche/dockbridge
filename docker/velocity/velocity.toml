@@ -1,0 +1,38 @@
+# Basic Velocity config for local Limbo testing
+config-version = "2.9"
+
+bind = "0.0.0.0:26678"
+motd = "DockBridge Test Proxy"
+show-max-players = 20
+online-mode = false
+force-key-authentication = false
+player-info-forwarding-mode = "modern"
+forwarding-secret-file = "forwarding.secret"
+
+[servers]
+try = []
+
+[forced-hosts]
+
+[advanced]
+  compression-threshold = 256
+  compression-level = -1
+  login-ratelimit = 3000
+  connection-timeout = 5000
+  read-timeout = 30000
+  haproxy-proxy-protocol = false
+  tcp-fast-open = false
+  bungee-plugin-message-channel = true
+  show-ping-requests = false
+
+[query]
+  enabled = true
+  port = 26678
+  map = "DockBridge"
+
+[metrics]
+  enabled = false
+
+[serverlist]
+  [serverlist.favicon]
+    generate = true

@@ -1,0 +1,80 @@
+version: "3.9"
+
+services:
+  limbo:
+    build:
+      context: ./docker/limbo
+      args:
+        LIMBO_JAR_URL: ${LIMBO_JAR_URL:-https://ci.loohpjames.com/job/Limbo/lastSuccessfulBuild/artifact/target/Limbo-0.7.16-ALPHA-1.21.10.jar}
+    container_name: dockbridge-limbo
+    restart: unless-stopped
+    environment:
+      - JAVA_OPTS=-Xms256M -Xmx512M
+    volumes:
+      - ./docker/limbo/server.properties:/opt/limbo/server.properties
+    networks:
+      - dockbridge-internal
+    labels:
+      - net.uebliche.dockbridge.autoregister=true
+      - net.uebliche.dockbridge.server_name=limbo
+      - net.uebliche.dockbridge.server_port=30000
+
+  limbo2:
+    build:
+      context: ./docker/limbo
+      args:
+        LIMBO_JAR_URL: ${LIMBO_JAR_URL:-https://ci.loohpjames.com/job/Limbo/lastSuccessfulBuild/artifact/target/Limbo-0.7.16-ALPHA-1.21.10.jar}
+    container_name: dockbridge-limbo2
+    restart: unless-stopped
+    environment:
+      - JAVA_OPTS=-Xms256M -Xmx512M
+    volumes:
+      - ./docker/limbo/server2.properties:/opt/limbo/server.properties
+    networks:
+      - dockbridge-internal
+    labels:
+      - net.uebliche.dockbridge.autoregister=true
+      - net.uebliche.dockbridge.server_name=limbo
+      - net.uebliche.dockbridge.server_port=30001
+
+  limbo3:
+    build:
+      context: ./docker/limbo
+      args:
+        LIMBO_JAR_URL: ${LIMBO_JAR_URL:-https://ci.loohpjames.com/job/Limbo/lastSuccessfulBuild/artifact/target/Limbo-0.7.16-ALPHA-1.21.10.jar}
+    container_name: dockbridge-limbo3
+    restart: unless-stopped
+    environment:
+      - JAVA_OPTS=-Xms256M -Xmx512M
+    volumes:
+      - ./docker/limbo/server3.properties:/opt/limbo/server.properties
+    networks:
+      - dockbridge-internal
+    labels:
+      - net.uebliche.dockbridge.autoregister=true
+      - net.uebliche.dockbridge.server_name=limbo
+      - net.uebliche.dockbridge.server_port=30002
+
+  velocity:
+    image: eclipse-temurin:21-jdk
+    container_name: dockbridge-velocity
+    working_dir: /app
+    command: ["sh", "-c", "./gradlew runVelocity --no-daemon --stacktrace"]
+    depends_on:
+      - limbo
+    restart: unless-stopped
+    ports:
+      - "26678:26678"
+    environment:
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+    volumes:
+      - ./:/app
+      - ./docker/velocity/velocity.toml:/app/run/velocity/velocity.toml:ro
+      - ./docker/velocity/velocity.toml:/app/run/velocity.toml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - dockbridge-internal
+
+networks:
+  dockbridge-internal:
+    driver: bridge

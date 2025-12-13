@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      changelog:
+        description: "Changelog text"
+        required: false
+        default: ""
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute version
+        id: version
+        shell: bash
+        run: |
+          date_part=$(date -u +%F)
+          run_number=${GITHUB_RUN_NUMBER:-1}
+          suffix=""
+          if [ "$run_number" -gt 1 ]; then
+            offset=$((run_number - 2))
+            char_code=$((98 + (offset % 25))) # starts at 'b'
+            printf -v suffix "\\$(printf '%03o' "${char_code}")"
+          fi
+          VERSION="${date_part}${suffix}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Computed version: ${VERSION}"
+
+      - name: Export version env
+        run: |
+          echo "MODRINTH_VERSION=${{ steps.version.outputs.version }}" >> "$GITHUB_ENV"
+          echo "DOCKBRIDGE_VERSION=${{ steps.version.outputs.version }}" >> "$GITHUB_ENV"
+          echo "MODRINTH_CHANGELOG=${{ github.event.inputs.changelog }}" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Build
+        run: ./gradlew build --stacktrace
+
+      - name: Publish to Modrinth
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+        run: ./gradlew modrinth --stacktrace
