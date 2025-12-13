@@ -64,7 +64,7 @@ modrinth {
     changelog.set(System.getenv("MODRINTH_CHANGELOG") ?: "")
     versionType.set("release")
     uploadFile.set(tasks.shadowJar.flatMap { it.archiveFile })
-    gameVersions.set(listOf("1.21.10"))
+    gameVersions.set(listOf("3.1.1"))
     loaders.set(listOf("velocity"))
     syncBodyFrom.set(rootProject.file("README.md"))
 }
