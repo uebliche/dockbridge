@@ -1,3 +1,6 @@
+import groovy.json.JsonSlurper
+import java.net.URL
+
 plugins {
     java
     id("com.github.johnrengelman.shadow") version "8.1.1"
@@ -13,6 +16,55 @@ val pluginVersion: String = System.getenv("DOCKBRIDGE_VERSION")
 
 version = pluginVersion
 buildDir = file("/tmp/dockbridge-build")
+
+private val fallbackGameVersions = listOf(
+    "1.19.4",
+    "1.20",
+    "1.20.1",
+    "1.20.2",
+    "1.20.3",
+    "1.20.4",
+    "1.20.5",
+    "1.20.6",
+    "1.21",
+    "1.21.1"
+)
+
+private fun versionAtLeast(version: String, floor: List<Int>): Boolean {
+    val parts = version.split(".").mapNotNull { it.toIntOrNull() }
+    val maxSize = maxOf(parts.size, floor.size)
+    for (i in 0 until maxSize) {
+        val current = parts.getOrElse(i) { 0 }
+        val min = floor.getOrElse(i) { 0 }
+        if (current != min) return current > min
+    }
+    return true
+}
+
+private fun resolvedGameVersions(): List<String> {
+    val override = System.getenv("MODRINTH_GAME_VERSIONS")
+        ?.split(",")
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+    if (!override.isNullOrEmpty()) return override
+
+    return try {
+        val manifest = URL("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json")
+            .openStream().use { JsonSlurper().parse(it) as Map<*, *> }
+        val versions = manifest["versions"] as? List<*> ?: return fallbackGameVersions
+        val floor = listOf(1, 19, 4)
+        versions.asSequence()
+            .mapNotNull { it as? Map<*, *> }
+            .filter { it["type"] == "release" }
+            .mapNotNull { it["id"] as? String }
+            .filter { versionAtLeast(it, floor) }
+            .toList()
+            .ifEmpty { fallbackGameVersions }
+    } catch (e: Exception) {
+        logger.warn("Falling back to static MC versions for Modrinth: ${e.message}")
+        fallbackGameVersions
+    }
+}
 
 repositories {
     mavenCentral()
@@ -64,20 +116,7 @@ modrinth {
     changelog.set(System.getenv("MODRINTH_CHANGELOG") ?: "")
     versionType.set("release")
     uploadFile.set(tasks.shadowJar.flatMap { it.archiveFile })
-    gameVersions.set(
-        listOf(
-            "1.19.4",
-            "1.20",
-            "1.20.1",
-            "1.20.2",
-            "1.20.3",
-            "1.20.4",
-            "1.20.5",
-            "1.20.6",
-            "1.21",
-            "1.21.1"
-        )
-    )
+    gameVersions.set(resolvedGameVersions())
     loaders.set(listOf("velocity"))
     syncBodyFrom.set(rootProject.file("README.md"))
 }
