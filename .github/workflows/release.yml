@@ -20,15 +20,8 @@ jobs:
         id: version
         shell: bash
         run: |
-          date_part=$(date -u +%F)
-          run_number=${GITHUB_RUN_NUMBER:-1}
-          suffix=""
-          if [ "$run_number" -gt 1 ]; then
-            offset=$((run_number - 2))
-            char_code=$((98 + (offset % 25))) # starts at 'b'
-            printf -v suffix "\\$(printf '%03o' "${char_code}")"
-          fi
-          VERSION="${date_part}${suffix}"
+          date_part=$(date -u +%Y.%m.%d)
+          VERSION="${date_part}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Computed version: ${VERSION}"
 

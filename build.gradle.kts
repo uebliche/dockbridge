@@ -12,7 +12,7 @@ group = "net.uebliche.dockbridge"
 
 val pluginVersion: String = System.getenv("DOCKBRIDGE_VERSION")
     ?: System.getenv("MODRINTH_VERSION")
-    ?: "2025-11-29"
+    ?: "2025.11.29"
 
 version = pluginVersion
 buildDir = file("/tmp/dockbridge-build")
