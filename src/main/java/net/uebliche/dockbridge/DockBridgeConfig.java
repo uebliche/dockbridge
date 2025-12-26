@@ -28,6 +28,13 @@ public final class DockBridgeConfig {
     private final String autoRegisterNameLabel;
     private final String autoRegisterPortLabel;
     private final String duplicateStrategy;
+    private final boolean logScan;
+    private final boolean logMatches;
+    private final boolean logSummary;
+    private final boolean logSummaryWhenUnchanged;
+    private final boolean logRegistered;
+    private final boolean logUpdated;
+    private final boolean logUnregistered;
 
     private DockBridgeConfig(
             String dockerEndpoint,
@@ -40,7 +47,14 @@ public final class DockBridgeConfig {
             String autoRegisterLabelValue,
             String autoRegisterNameLabel,
             String autoRegisterPortLabel,
-            String duplicateStrategy
+            String duplicateStrategy,
+            boolean logScan,
+            boolean logMatches,
+            boolean logSummary,
+            boolean logSummaryWhenUnchanged,
+            boolean logRegistered,
+            boolean logUpdated,
+            boolean logUnregistered
     ) {
         this.dockerEndpoint = Objects.requireNonNull(dockerEndpoint, "dockerEndpoint");
         this.dockerPollIntervalSeconds = dockerPollIntervalSeconds;
@@ -53,6 +67,13 @@ public final class DockBridgeConfig {
         this.autoRegisterNameLabel = Objects.requireNonNull(autoRegisterNameLabel, "autoRegisterNameLabel");
         this.autoRegisterPortLabel = Objects.requireNonNull(autoRegisterPortLabel, "autoRegisterPortLabel");
         this.duplicateStrategy = Objects.requireNonNull(duplicateStrategy, "duplicateStrategy");
+        this.logScan = logScan;
+        this.logMatches = logMatches;
+        this.logSummary = logSummary;
+        this.logSummaryWhenUnchanged = logSummaryWhenUnchanged;
+        this.logRegistered = logRegistered;
+        this.logUpdated = logUpdated;
+        this.logUnregistered = logUnregistered;
     }
 
     public static DockBridgeConfig load(Path dataDirectory, Logger logger) {
@@ -103,6 +124,13 @@ public final class DockBridgeConfig {
         String autoNameLabel = properties.getProperty("docker.autoregister.name_label", "net.uebliche.dockbridge.server_name");
         String autoPortLabel = properties.getProperty("docker.autoregister.port_label", "net.uebliche.dockbridge.server_port");
         String duplicateStrategy = properties.getProperty("docker.autoregister.duplicate_strategy", "suffix");
+        boolean logScan = readBoolean(properties, "logging.scan", false);
+        boolean logMatches = readBoolean(properties, "logging.matches", false);
+        boolean logSummary = readBoolean(properties, "logging.summary", true);
+        boolean logSummaryWhenUnchanged = readBoolean(properties, "logging.summary_when_unchanged", false);
+        boolean logRegistered = readBoolean(properties, "logging.registered", true);
+        boolean logUpdated = readBoolean(properties, "logging.updated", true);
+        boolean logUnregistered = readBoolean(properties, "logging.unregistered", true);
 
         return new DockBridgeConfig(
                 dockerEndpoint,
@@ -115,7 +143,14 @@ public final class DockBridgeConfig {
                 autoLabelValue,
                 autoNameLabel,
                 autoPortLabel,
-                duplicateStrategy
+                duplicateStrategy,
+                logScan,
+                logMatches,
+                logSummary,
+                logSummaryWhenUnchanged,
+                logRegistered,
+                logUpdated,
+                logUnregistered
         );
     }
 
@@ -182,5 +217,33 @@ public final class DockBridgeConfig {
 
     public String duplicateStrategy() {
         return duplicateStrategy;
+    }
+
+    public boolean logScan() {
+        return logScan;
+    }
+
+    public boolean logMatches() {
+        return logMatches;
+    }
+
+    public boolean logSummary() {
+        return logSummary;
+    }
+
+    public boolean logSummaryWhenUnchanged() {
+        return logSummaryWhenUnchanged;
+    }
+
+    public boolean logRegistered() {
+        return logRegistered;
+    }
+
+    public boolean logUpdated() {
+        return logUpdated;
+    }
+
+    public boolean logUnregistered() {
+        return logUnregistered;
     }
 }

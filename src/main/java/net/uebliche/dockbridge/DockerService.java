@@ -16,12 +16,14 @@ import org.slf4j.Logger;
 import java.net.InetSocketAddress;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Minimal Docker integration to auto-register containers exposing a matching label.
@@ -57,28 +59,54 @@ public final class DockerService {
     }
 
     public void refreshContainers() {
-        logger.info("Scanning Docker for auto-register containers using label {}={}.",
-                config.autoRegisterLabelKey(), config.autoRegisterLabelValue());
+        if (config.logScan()) {
+            logger.info("Scanning Docker for auto-register containers using label {}={}.",
+                    config.autoRegisterLabelKey(), config.autoRegisterLabelValue());
+        }
         List<Container> containers = listMatchingContainers();
         lastScan = Instant.now();
         if (containers.isEmpty()) {
-            logger.warn("No Docker containers found with label {}={}.",
-                    config.autoRegisterLabelKey(), config.autoRegisterLabelValue());
             // Unregister anything we had before.
-            unregisterMissing(Set.of());
+            int unregisteredCount = unregisterMissing(Set.of());
+            registeredNames.clear();
+            lastRegistrations = List.of();
+            lastMatchedCount = 0;
+            if (config.logSummary() && (unregisteredCount > 0 || config.logSummaryWhenUnchanged())) {
+                logger.info("Docker refresh complete: matched=0, registered=0, updated=0, unchanged=0, unregistered={}.",
+                        unregisteredCount);
+            }
             return;
         }
 
-        logger.info("Found {} matching container(s).", containers.size());
+        containers = new ArrayList<>(containers);
+        containers.sort(Comparator.comparing(Container::getId, Comparator.nullsLast(String::compareTo)));
+
+        Map<String, Registration> previousByName = lastRegistrations.stream()
+                .collect(Collectors.toMap(Registration::serverName, registration -> registration, (a, b) -> a));
+        Map<String, Registration> previousByContainer = lastRegistrations.stream()
+                .collect(Collectors.toMap(Registration::containerId, registration -> registration, (a, b) -> a));
+        Map<String, List<Container>> nameGroups = containers.stream()
+                .collect(Collectors.groupingBy(this::resolveServerName));
+
         Set<String> seenNames = new HashSet<>();
         Map<String, Registration> newRegistrations = new HashMap<>();
         int registeredCount = 0;
+        int updatedCount = 0;
+        int unchangedCount = 0;
         for (Container container : containers) {
-            Registration registration = registerContainer(container, seenNames);
-            if (registration != null) {
-                seenNames.add(registration.serverName());
-                newRegistrations.put(registration.serverName(), registration);
-                registeredCount++;
+            String baseName = resolveServerName(container);
+            String serverName = chooseServerName(container, baseName, nameGroups, previousByName, previousByContainer, seenNames);
+            RegistrationOutcome outcome = registerContainer(container, baseName, serverName);
+            if (outcome == null) {
+                continue;
+            }
+            Registration registration = outcome.registration();
+            seenNames.add(registration.serverName());
+            newRegistrations.put(registration.serverName(), registration);
+            switch (outcome.status()) {
+                case REGISTERED -> registeredCount++;
+                case UPDATED -> updatedCount++;
+                case UNCHANGED -> unchangedCount++;
             }
         }
 
@@ -87,8 +115,10 @@ public final class DockerService {
         registeredNames.addAll(seenNames);
         lastRegistrations = new ArrayList<>(newRegistrations.values());
         lastMatchedCount = containers.size();
-        logger.info("Docker refresh complete: matched={}, registered/updated={}, unregistered={}.",
-                containers.size(), registeredCount, unregisteredCount);
+        if (config.logSummary() && (registeredCount > 0 || updatedCount > 0 || unregisteredCount > 0 || config.logSummaryWhenUnchanged())) {
+            logger.info("Docker refresh complete: matched={}, registered={}, updated={}, unchanged={}, unregistered={}.",
+                    containers.size(), registeredCount, updatedCount, unchangedCount, unregisteredCount);
+        }
     }
 
     private List<Container> listMatchingContainers() {
@@ -97,16 +127,12 @@ public final class DockerService {
                     .withShowAll(false)
                     .withLabelFilter(Map.of(config.autoRegisterLabelKey(), config.autoRegisterLabelValue()));
             List<Container> result = cmd.exec();
-            if (result != null && !result.isEmpty()) {
+            if (result != null && !result.isEmpty() && config.logMatches()) {
                 for (Container c : result) {
-                    logger.info("Matched container id={} names={} labels={}",
-                            c.getId().substring(0, 12),
-                            c.getNames() == null ? "[]" : String.join(",", c.getNames()),
-                            c.getLabels());
+                    logger.info("Matched container id={} names={}",
+                            shortContainerId(c),
+                            c.getNames() == null ? "[]" : String.join(",", c.getNames()));
                 }
-            } else {
-                logger.info("Docker returned no containers for the filter ({}={}).",
-                        config.autoRegisterLabelKey(), config.autoRegisterLabelValue());
             }
             return result;
         } catch (Exception e) {
@@ -115,12 +141,7 @@ public final class DockerService {
         }
     }
 
-    private Registration registerContainer(Container container, Set<String> seenNames) {
-        String baseName = resolveServerName(container);
-        String serverName = toUniqueName(baseName, container, seenNames);
-        if (!serverName.equals(baseName)) {
-            logger.info("Adjusted server name from {} to {} to ensure uniqueness.", baseName, serverName);
-        }
+    private RegistrationOutcome registerContainer(Container container, String baseName, String serverName) {
         int port = resolvePort(container);
         String host = resolveHost(container);
 
@@ -129,10 +150,27 @@ public final class DockerService {
 
         Optional<RegisteredServer> existing = server.getServer(serverName);
         if (existing.isPresent()) {
-            server.unregisterServer(info);
-            logger.info("Updated existing server {} -> {}:{}", serverName, address.getHostString(), address.getPort());
-        } else {
-            logger.info("Registering server {} at {}:{}", serverName, address.getHostString(), address.getPort());
+            InetSocketAddress existingAddress = existing.get().getServerInfo().getAddress();
+            if (addressesMatch(existingAddress, address)) {
+                ensureTryIncludes(serverName);
+                return new RegistrationOutcome(
+                        new Registration(serverName, host, port, shortContainerId(container), baseName),
+                        RegistrationStatus.UNCHANGED);
+            }
+            server.unregisterServer(existing.get().getServerInfo());
+            try {
+                server.registerServer(info);
+            } catch (Exception ex) {
+                logger.warn("Failed to update server {} at {}:{}: {}", serverName, address.getHostString(), address.getPort(), ex.getMessage());
+                return null;
+            }
+            ensureTryIncludes(serverName);
+            if (config.logUpdated()) {
+                logger.info("Updated server {} -> {}:{}.", serverName, address.getHostString(), address.getPort());
+            }
+            return new RegistrationOutcome(
+                    new Registration(serverName, host, port, shortContainerId(container), baseName),
+                    RegistrationStatus.UPDATED);
         }
         try {
             server.registerServer(info);
@@ -141,27 +179,41 @@ public final class DockerService {
             return null;
         }
         ensureTryIncludes(serverName);
-        logger.info("Registration complete for server {} -> {}:{}.", serverName, address.getHostString(), address.getPort());
-        return new Registration(serverName, host, port, shortContainerId(container), baseName);
+        if (config.logRegistered()) {
+            logger.info("Registered server {} -> {}:{}.", serverName, address.getHostString(), address.getPort());
+        }
+        return new RegistrationOutcome(
+                new Registration(serverName, host, port, shortContainerId(container), baseName),
+                RegistrationStatus.REGISTERED);
     }
 
-    private String toUniqueName(String baseName, Container container, Set<String> seenNames) {
-        String candidate = baseName;
+    private String chooseServerName(
+            Container container,
+            String baseName,
+            Map<String, List<Container>> nameGroups,
+            Map<String, Registration> previousByName,
+            Map<String, Registration> previousByContainer,
+            Set<String> seenNames
+    ) {
         if (duplicateStrategy == DuplicateStrategy.OVERWRITE) {
-            return candidate;
+            return baseName;
         }
 
-        String suffix = container.getId() != null && container.getId().length() >= 6
-                ? container.getId().substring(0, 6)
-                : String.valueOf(System.nanoTime());
+        String containerKey = shortContainerId(container);
+        Registration previous = previousByContainer.get(containerKey);
+        if (previous != null && !seenNames.contains(previous.serverName())) {
+            return previous.serverName();
+        }
 
-        if (seenNames.contains(candidate) || registeredNames.contains(candidate) || server.getServer(candidate).isPresent()) {
-            candidate = baseName + "-" + suffix;
-        }
-        // If still not unique (extremely unlikely), append timestamp.
-        if (seenNames.contains(candidate) || registeredNames.contains(candidate) || server.getServer(candidate).isPresent()) {
-            candidate = baseName + "-" + suffix + "-" + System.currentTimeMillis();
-        }
+        List<Container> group = nameGroups.getOrDefault(baseName, List.of());
+        int groupSize = group.size();
+        String suffix = shortContainerSuffix(container, 6);
+        boolean isPrimary = groupSize > 0 && group.get(0) == container;
+        String candidate = groupSize > 1
+                ? (isPrimary ? baseName : baseName + "-" + suffix)
+                : baseName;
+
+        candidate = ensureUniqueName(candidate, baseName, suffix, previousByName, seenNames, containerKey);
         return candidate;
     }
 
@@ -170,6 +222,52 @@ public final class DockerService {
             return "unknown";
         }
         return container.getId().substring(0, Math.min(12, container.getId().length()));
+    }
+
+    private String shortContainerSuffix(Container container, int length) {
+        String id = shortContainerId(container);
+        return id.substring(0, Math.min(length, id.length()));
+    }
+
+    private String ensureUniqueName(
+            String candidate,
+            String baseName,
+            String suffix,
+            Map<String, Registration> previousByName,
+            Set<String> seenNames,
+            String containerKey
+    ) {
+        String current = candidate;
+        if (nameConflicts(current, previousByName, seenNames, containerKey)) {
+            String withSuffix = baseName + "-" + suffix;
+            if (!nameConflicts(withSuffix, previousByName, seenNames, containerKey)) {
+                return withSuffix;
+            }
+            current = withSuffix;
+        }
+
+        int counter = 1;
+        while (nameConflicts(current, previousByName, seenNames, containerKey)) {
+            current = baseName + "-" + suffix + "-" + counter;
+            counter++;
+        }
+        return current;
+    }
+
+    private boolean nameConflicts(
+            String name,
+            Map<String, Registration> previousByName,
+            Set<String> seenNames,
+            String containerKey
+    ) {
+        if (seenNames.contains(name)) {
+            return true;
+        }
+        Registration previous = previousByName.get(name);
+        if (server.getServer(name).isPresent()) {
+            return previous == null || !previous.containerId().equals(containerKey);
+        }
+        return false;
     }
 
     public List<Registration> getCurrentRegistrations() {
@@ -262,7 +360,9 @@ public final class DockerService {
         }
         server.unregisterServer(existing.get().getServerInfo());
         registeredNames.remove(serverName);
-        logger.info("Unregistered server {} (no matching container).", serverName);
+        if (config.logUnregistered()) {
+            logger.info("Unregistered server {} (no matching container).", serverName);
+        }
     }
 
     private int unregisterMissing(Set<String> seenNames) {
@@ -284,7 +384,9 @@ public final class DockerService {
         }
         try {
             order.add(serverName);
-            logger.info("Added {} to connection order list.", serverName);
+            if (config.logRegistered() || config.logUpdated()) {
+                logger.info("Added {} to connection order list.", serverName);
+            }
         } catch (UnsupportedOperationException ex) {
             logger.warn("Could not update connection order at runtime. Please ensure '{}' is present in the 'try' list of velocity.toml.", serverName);
         }
@@ -299,5 +401,22 @@ public final class DockerService {
                 .sslConfig(clientConfig.getSSLConfig())
                 .build();
         return DockerClientImpl.getInstance(clientConfig, httpClient);
+    }
+
+    private boolean addressesMatch(InetSocketAddress existing, InetSocketAddress desired) {
+        if (existing == null || desired == null) {
+            return false;
+        }
+        return existing.getPort() == desired.getPort()
+                && existing.getHostString().equalsIgnoreCase(desired.getHostString());
+    }
+
+    private enum RegistrationStatus {
+        REGISTERED,
+        UPDATED,
+        UNCHANGED
+    }
+
+    private record RegistrationOutcome(Registration registration, RegistrationStatus status) {
     }
 }

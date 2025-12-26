@@ -1,6 +1,6 @@
 FROM eclipse-temurin:21-jre-alpine
 
-ARG LIMBO_JAR_URL="https://ci.loohpjames.com/job/Limbo/lastSuccessfulBuild/artifact/target/Limbo-0.7.16-ALPHA-1.21.10.jar"
+ARG LIMBO_JAR_URL="https://ci.loohpjames.com/job/Limbo/lastSuccessfulBuild/artifact/target/Limbo-0.7.18-ALPHA-1.21.11.jar"
 
 RUN apk add --no-cache curl \
     && mkdir -p /opt/limbo \

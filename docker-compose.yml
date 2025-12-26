@@ -5,7 +5,7 @@ services:
     build:
       context: ./docker/limbo
       args:
-        LIMBO_JAR_URL: ${LIMBO_JAR_URL:-https://ci.loohpjames.com/job/Limbo/lastSuccessfulBuild/artifact/target/Limbo-0.7.16-ALPHA-1.21.10.jar}
+        LIMBO_JAR_URL: ${LIMBO_JAR_URL:-https://ci.loohpjames.com/job/Limbo/lastSuccessfulBuild/artifact/target/Limbo-0.7.18-ALPHA-1.21.11.jar}
     container_name: dockbridge-limbo
     restart: unless-stopped
     environment:
@@ -23,7 +23,7 @@ services:
     build:
       context: ./docker/limbo
       args:
-        LIMBO_JAR_URL: ${LIMBO_JAR_URL:-https://ci.loohpjames.com/job/Limbo/lastSuccessfulBuild/artifact/target/Limbo-0.7.16-ALPHA-1.21.10.jar}
+        LIMBO_JAR_URL: ${LIMBO_JAR_URL:-https://ci.loohpjames.com/job/Limbo/lastSuccessfulBuild/artifact/target/Limbo-0.7.18-ALPHA-1.21.11.jar}
     container_name: dockbridge-limbo2
     restart: unless-stopped
     environment:
@@ -41,7 +41,7 @@ services:
     build:
       context: ./docker/limbo
       args:
-        LIMBO_JAR_URL: ${LIMBO_JAR_URL:-https://ci.loohpjames.com/job/Limbo/lastSuccessfulBuild/artifact/target/Limbo-0.7.16-ALPHA-1.21.10.jar}
+        LIMBO_JAR_URL: ${LIMBO_JAR_URL:-https://ci.loohpjames.com/job/Limbo/lastSuccessfulBuild/artifact/target/Limbo-0.7.18-ALPHA-1.21.11.jar}
     container_name: dockbridge-limbo3
     restart: unless-stopped
     environment:
@@ -59,7 +59,7 @@ services:
     image: eclipse-temurin:21-jdk
     container_name: dockbridge-velocity
     working_dir: /app
-    command: ["sh", "-c", "./gradlew runVelocity --no-daemon --stacktrace"]
+    command: ["sh", "-c", "mkdir -p /app/run/velocity && cp /app/docker/velocity/velocity.toml /app/run/velocity/velocity.toml && cp /app/docker/velocity/velocity.toml /app/run/velocity.toml && ./gradlew runVelocity --no-daemon --stacktrace"]
     depends_on:
       - limbo
     restart: unless-stopped
@@ -69,8 +69,6 @@ services:
       GRADLE_OPTS: "-Dorg.gradle.daemon=false"
     volumes:
       - ./:/app
-      - ./docker/velocity/velocity.toml:/app/run/velocity/velocity.toml:ro
-      - ./docker/velocity/velocity.toml:/app/run/velocity.toml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - dockbridge-internal

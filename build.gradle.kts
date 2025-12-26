@@ -60,6 +60,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("com.github.docker-java:docker-java-api:3.3.6")
     implementation("com.github.docker-java:docker-java-core:3.3.6")
+    implementation("com.github.docker-java:docker-java-transport:3.3.6")
     implementation("com.github.docker-java:docker-java-transport-zerodep:3.3.6")
 }
 
