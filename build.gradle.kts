@@ -115,7 +115,6 @@ tasks.named<JavaCompile>("compileJava") {
 tasks.withType<Jar>().configureEach {
     if (name == "sourcesJar") {
         dependsOn(generateBuildConstants)
-        from(generatedBuildConstantsDir)
     }
 }
 
