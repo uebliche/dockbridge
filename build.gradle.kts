@@ -112,9 +112,11 @@ tasks.named<JavaCompile>("compileJava") {
     dependsOn(generateBuildConstants)
 }
 
-tasks.named<Jar>("sourcesJar") {
-    dependsOn(generateBuildConstants)
-    from(generatedBuildConstantsDir)
+tasks.withType<Jar>().configureEach {
+    if (name == "sourcesJar") {
+        dependsOn(generateBuildConstants)
+        from(generatedBuildConstantsDir)
+    }
 }
 
 private fun resolvedGameVersions(): List<String> {
