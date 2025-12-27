@@ -112,6 +112,11 @@ tasks.named<JavaCompile>("compileJava") {
     dependsOn(generateBuildConstants)
 }
 
+tasks.named<Jar>("sourcesJar") {
+    dependsOn(generateBuildConstants)
+    from(generatedBuildConstantsDir)
+}
+
 private fun resolvedGameVersions(): List<String> {
     val override = System.getenv("MODRINTH_GAME_VERSIONS")
         ?.split(",")
