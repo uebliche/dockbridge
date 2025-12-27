@@ -18,8 +18,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @Plugin(
         id = "dockbridge",
         name = "DockBridge",
-        version = "2025.11.29",
-        authors = {"Übliche"}
+        version = BuildConstants.VERSION,
+        authors = {"übliche"}
 )
 public final class DockBridgePlugin {
 

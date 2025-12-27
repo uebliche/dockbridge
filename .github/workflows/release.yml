@@ -11,24 +11,17 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      DOCKBRIDGE_RELEASE: "true"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Compute version
-        id: version
-        shell: bash
+      - name: Export changelog env
         run: |
-          date_part=$(date -u +%Y.%m.%d)
-          VERSION="${date_part}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Computed version: ${VERSION}"
-
-      - name: Export version env
-        run: |
-          echo "MODRINTH_VERSION=${{ steps.version.outputs.version }}" >> "$GITHUB_ENV"
-          echo "DOCKBRIDGE_VERSION=${{ steps.version.outputs.version }}" >> "$GITHUB_ENV"
           echo "MODRINTH_CHANGELOG=${{ github.event.inputs.changelog }}" >> "$GITHUB_ENV"
 
       - name: Set up JDK 21
@@ -47,6 +40,10 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
+      - name: Compute version
+        id: version
+        run: echo "version=$(./gradlew -q printVersion)" >> "$GITHUB_OUTPUT"
+
       - name: Build
         run: ./gradlew build --stacktrace
 
@@ -54,3 +51,10 @@ jobs:
         env:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
         run: ./gradlew modrinth --stacktrace
+
+      - name: Tag release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.version.outputs.version }}"
+          git push origin "refs/tags/${{ steps.version.outputs.version }}"

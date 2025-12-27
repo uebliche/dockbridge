@@ -1,5 +1,9 @@
 import groovy.json.JsonSlurper
+import java.io.ByteArrayOutputStream
 import java.net.URL
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 plugins {
     java
@@ -10,12 +14,103 @@ plugins {
 
 group = "net.uebliche.dockbridge"
 
-val pluginVersion: String = System.getenv("DOCKBRIDGE_VERSION")
-    ?: System.getenv("MODRINTH_VERSION")
-    ?: "2025.11.29"
+val buildDirOverride = file("/tmp/dockbridge-build")
+buildDir = buildDirOverride
 
+fun gitOutput(vararg args: String): String? {
+    return try {
+        val stdout = ByteArrayOutputStream()
+        exec {
+            commandLine("git", *args)
+            standardOutput = stdout
+            isIgnoreExitValue = true
+        }
+        stdout.toString().trim().ifBlank { null }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+fun computeReleaseVersion(datePart: String): String {
+    val tags = gitOutput("tag", "--list", "${datePart}*")
+        ?.lines()
+        ?.filter { it.isNotBlank() }
+        ?: emptyList()
+    if (tags.isEmpty()) return datePart
+
+    val tagPattern = Regex("^${Regex.escape(datePart)}(?:-([A-Z]))?$")
+    var maxIndex = -1
+    for (tag in tags) {
+        val match = tagPattern.matchEntire(tag) ?: continue
+        val letter = match.groupValues.getOrNull(1)?.firstOrNull()
+        val index = if (letter == null) 0 else (letter.code - 'A'.code)
+        if (index > maxIndex) maxIndex = index
+    }
+
+    if (maxIndex < 0) return datePart
+
+    val nextIndex = maxIndex + 1
+    if (nextIndex >= 26) {
+        throw GradleException("Too many releases for $datePart (max Z).")
+    }
+    val nextLetter = ('A'.code + nextIndex).toChar()
+    return "$datePart-$nextLetter"
+}
+
+fun computePluginVersion(): String {
+    val datePart = LocalDate.now(ZoneOffset.UTC)
+        .format(DateTimeFormatter.ofPattern("yyyy.MM.dd"))
+    val isReleaseBuild = System.getenv("DOCKBRIDGE_RELEASE")
+        ?.equals("true", ignoreCase = true) == true
+    if (isReleaseBuild) {
+        return computeReleaseVersion(datePart)
+    }
+
+    val gitHash = gitOutput("rev-parse", "--short=8", "HEAD") ?: "nogit"
+    return "$datePart-$gitHash"
+}
+
+val pluginVersion = computePluginVersion()
 version = pluginVersion
-buildDir = file("/tmp/dockbridge-build")
+
+val generatedBuildConstantsDir = layout.buildDirectory.dir("generated/sources/buildConstants/java")
+
+val generateBuildConstants by tasks.registering {
+    outputs.dir(generatedBuildConstantsDir)
+    doLast {
+        val targetDir = generatedBuildConstantsDir.get().asFile
+            .resolve("net/uebliche/dockbridge")
+        targetDir.mkdirs()
+
+        val escapedVersion = pluginVersion
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+
+        val outputFile = targetDir.resolve("BuildConstants.java")
+        outputFile.writeText(
+            """
+            package net.uebliche.dockbridge;
+
+            public final class BuildConstants {
+                public static final String VERSION = "$escapedVersion";
+
+                private BuildConstants() {
+                }
+            }
+            """.trimIndent() + "\n"
+        )
+    }
+}
+
+sourceSets {
+    main {
+        java.srcDir(generatedBuildConstantsDir)
+    }
+}
+
+tasks.named<JavaCompile>("compileJava") {
+    dependsOn(generateBuildConstants)
+}
 
 private fun resolvedGameVersions(): List<String> {
     val override = System.getenv("MODRINTH_GAME_VERSIONS")
@@ -88,7 +183,7 @@ tasks.runVelocity {
 modrinth {
     token.set(System.getenv("MODRINTH_TOKEN") ?: "")
     projectId.set("dockbridge")
-    versionNumber.set(System.getenv("MODRINTH_VERSION") ?: pluginVersion)
+    versionNumber.set(pluginVersion)
     changelog.set(System.getenv("MODRINTH_CHANGELOG") ?: "")
     versionType.set("release")
     uploadFile.set(tasks.shadowJar.flatMap { it.archiveFile })
@@ -97,4 +192,10 @@ modrinth {
     syncBodyFrom.set(
         providers.fileContents(rootProject.layout.projectDirectory.file("README.md")).asText
     )
+}
+
+tasks.register("printVersion") {
+    doLast {
+        println(project.version.toString())
+    }
 }
