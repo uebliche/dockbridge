@@ -170,6 +170,10 @@ tasks.withType<JavaCompile>().configureEach {
     options.release.set(21)
 }
 
+tasks.jar {
+    archiveClassifier.set("plain")
+}
+
 tasks.shadowJar {
     archiveClassifier.set("")
     relocate("com.google.gson", "net.uebliche.dockbridge.libs.gson")
@@ -183,6 +187,7 @@ tasks.build {
 
 tasks.runVelocity {
     velocityVersion("3.4.0-SNAPSHOT")
+    pluginJars.from(tasks.shadowJar.flatMap { it.archiveFile })
     dependsOn(tasks.shadowJar)
 }
 

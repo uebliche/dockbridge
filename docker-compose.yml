@@ -56,10 +56,10 @@ services:
       - net.uebliche.dockbridge.server_port=30002
 
   velocity:
-    image: eclipse-temurin:21-jdk
+    build:
+      context: .
+      dockerfile: docker/velocity/Dockerfile
     container_name: dockbridge-velocity
-    working_dir: /app
-    command: ["sh", "-c", "mkdir -p /app/run/velocity && cp /app/docker/velocity/velocity.toml /app/run/velocity/velocity.toml && cp /app/docker/velocity/velocity.toml /app/run/velocity.toml && ./gradlew runVelocity --no-daemon --stacktrace"]
     depends_on:
       - limbo
     restart: unless-stopped

@@ -49,7 +49,7 @@ Downloads Velocity, builds the plugin (shadowJar), and starts the proxy with the
 ```
 docker compose up --build        # or: docker compose -f docker-compose.limbo.yml up --build
 ```
-Includes three Limbo backends (ports 30000/30001/30002) and Velocity on host port 26678. Velocity runs via `runVelocity` inside the container and mounts your sources/config.
+Includes three Limbo backends (ports 30000/30001/30002) and Velocity on host port 26678. The container builds the shaded plugin jar and runs a real Velocity jar with the plugin loaded, while still mounting your sources/config.
 <!-- modrinth_exclude.end -->
 
 ## Commands & permissions
