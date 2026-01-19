@@ -1,9 +1,5 @@
 import groovy.json.JsonSlurper
-import java.io.ByteArrayOutputStream
 import java.net.URL
-import java.time.LocalDate
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 
 plugins {
     java
@@ -17,60 +13,7 @@ group = "net.uebliche.dockbridge"
 val buildDirOverride = file("/tmp/dockbridge-build")
 buildDir = buildDirOverride
 
-fun gitOutput(vararg args: String): String? {
-    return try {
-        val stdout = ByteArrayOutputStream()
-        exec {
-            commandLine("git", *args)
-            standardOutput = stdout
-            isIgnoreExitValue = true
-        }
-        stdout.toString().trim().ifBlank { null }
-    } catch (_: Exception) {
-        null
-    }
-}
-
-fun computeReleaseVersion(datePart: String): String {
-    val tags = gitOutput("tag", "--list", "${datePart}*")
-        ?.lines()
-        ?.filter { it.isNotBlank() }
-        ?: emptyList()
-    if (tags.isEmpty()) return datePart
-
-    val tagPattern = Regex("^${Regex.escape(datePart)}(?:-([A-Z]))?$")
-    var maxIndex = -1
-    for (tag in tags) {
-        val match = tagPattern.matchEntire(tag) ?: continue
-        val letter = match.groupValues.getOrNull(1)?.firstOrNull()
-        val index = if (letter == null) 0 else (letter.code - 'A'.code)
-        if (index > maxIndex) maxIndex = index
-    }
-
-    if (maxIndex < 0) return datePart
-
-    val nextIndex = maxIndex + 1
-    if (nextIndex >= 26) {
-        throw GradleException("Too many releases for $datePart (max Z).")
-    }
-    val nextLetter = ('A'.code + nextIndex).toChar()
-    return "$datePart-$nextLetter"
-}
-
-fun computePluginVersion(): String {
-    val datePart = LocalDate.now(ZoneOffset.UTC)
-        .format(DateTimeFormatter.ofPattern("yyyy.MM.dd"))
-    val isReleaseBuild = System.getenv("DOCKBRIDGE_RELEASE")
-        ?.equals("true", ignoreCase = true) == true
-    if (isReleaseBuild) {
-        return computeReleaseVersion(datePart)
-    }
-
-    val gitHash = gitOutput("rev-parse", "--short=8", "HEAD") ?: "nogit"
-    return "$datePart-$gitHash"
-}
-
-val pluginVersion = computePluginVersion()
+val pluginVersion = project.findProperty("tag")?.toString()?.trim().takeIf { !it.isNullOrBlank() } ?: "dev"
 version = pluginVersion
 
 val generatedBuildConstantsDir = layout.buildDirectory.dir("generated/sources/buildConstants/java")
