@@ -4,7 +4,6 @@ import java.net.URL
 plugins {
     java
     id("com.github.johnrengelman.shadow") version "8.1.1"
-    id("com.modrinth.minotaur") version "2.8.7"
     id("xyz.jpenilla.run-velocity") version "2.3.0"
 }
 
@@ -134,19 +133,6 @@ tasks.runVelocity {
     dependsOn(tasks.shadowJar)
 }
 
-modrinth {
-    token.set(System.getenv("MODRINTH_TOKEN") ?: "")
-    projectId.set("dockbridge")
-    versionNumber.set(pluginVersion)
-    changelog.set(System.getenv("MODRINTH_CHANGELOG") ?: "")
-    versionType.set("release")
-    uploadFile.set(tasks.shadowJar.flatMap { it.archiveFile })
-    gameVersions.set(resolvedGameVersions())
-    loaders.set(listOf("velocity"))
-    syncBodyFrom.set(
-        providers.fileContents(rootProject.layout.projectDirectory.file("README.md")).asText
-    )
-}
 
 tasks.register("printVersion") {
     doLast {
