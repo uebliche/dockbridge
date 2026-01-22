@@ -15,3 +15,5 @@ build-local/
 # OS clutter
 .DS_Store
 Thumbs.db
+
+.gradle-cache/
