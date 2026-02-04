@@ -1,0 +1,28 @@
+name: dockbridge-dev
+
+services:
+  velocity:
+    image: uebliche/base-java21
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+      - gradle-cache:/gradle-cache
+    environment:
+      GRADLE_USER_HOME: /gradle-cache/velocity
+      GRADLE_PROJECT_CACHE_DIR: /gradle-cache/velocity-project
+      VELOCITY_VERSION: ${VELOCITY_VERSION:-3.4.0-SNAPSHOT}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xms256M -Xmx768M -XX:+UseG1GC}
+      GRADLE_OPTS: ${GRADLE_OPTS:--Dorg.gradle.jvmargs=-Xmx768M -Dorg.gradle.workers.max=2}
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        sed -i 's/\r$$//' gradlew
+        chmod +x gradlew
+        ./gradlew --gradle-user-home /gradle-cache/velocity --project-cache-dir /gradle-cache/velocity-project runVelocity -Pvelocity_proxy_version="$${VELOCITY_VERSION}" --no-daemon
+    ports:
+      - "${HOST_PORT:-0}:26678"
+
+volumes:
+  gradle-cache:

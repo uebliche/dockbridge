@@ -109,7 +109,7 @@ dependencies {
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
-    options.release.set(21)
+    options.release.set(17)
 }
 
 tasks.jar {
@@ -128,7 +128,12 @@ tasks.build {
 }
 
 tasks.runVelocity {
-    velocityVersion("3.4.0-SNAPSHOT")
+    val velocityVersionOverride = project.findProperty("velocity_proxy_version")
+        ?.toString()
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?: "3.4.0-SNAPSHOT"
+    velocityVersion(velocityVersionOverride)
     pluginJars.from(tasks.shadowJar.flatMap { it.archiveFile })
     dependsOn(tasks.shadowJar)
 }

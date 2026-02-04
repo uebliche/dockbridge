@@ -1,0 +1,83 @@
+{
+  "id": "mod/dockbridge",
+  "kind": "project",
+  "name": "DockBridge",
+  "group": "uebliche/public",
+  "changelogPath": "../../docs/dockbridge/changelog.md",
+  "defaults": {
+    "loader": "velocity",
+    "runMode": "server"
+  },
+  "disabledLoaders": [
+    "fabric",
+    "forge",
+    "neoforge",
+    "quilt",
+    "paper",
+    "spigot"
+  ],
+  "runModes": [
+    "server"
+  ],
+  "gradleArgs": [
+    "--build-cache",
+    "--parallel",
+    "-PmcVersion={mcVersion}",
+    "-Pvelocity_proxy_version={velocityVersion}",
+    "-Ploader_cache_file={loader_cache_file}"
+  ],
+  "tasks": {
+    "build": "build",
+    "runServer": "runVelocity",
+    "runClient": "",
+    "template": "{task}"
+  },
+  "actions": [
+    {
+      "label": "Build",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "./gradlew build"
+      ],
+      "env": {
+        "JAVA_HOME": "/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home"
+      }
+    },
+    {
+      "label": "Run",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "docker compose -f compose.dev.yml up --build"
+      ],
+      "env": {
+        "HOST_PORT": "{HOST_PORT}",
+        "VELOCITY_VERSION": "{velocityVersion}"
+      }
+    }
+  ],
+  "loaderSource": "matrix",
+  "vars": [
+    {
+      "key": "velocityVersion",
+      "label": "Velocity version",
+      "default": "",
+      "options": []
+    },
+    {
+      "key": "HOST_PORT",
+      "label": "Docker host port (0 = auto)",
+      "default": "0"
+    },
+    {
+      "key": "AUTOSTART",
+      "label": "Autostart",
+      "default": "1",
+      "options": [
+        "0",
+        "1"
+      ]
+    }
+  ]
+}
