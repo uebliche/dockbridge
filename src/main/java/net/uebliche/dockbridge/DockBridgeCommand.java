@@ -34,6 +34,12 @@ public final class DockBridgeCommand implements SimpleCommand {
         int matched = dockerService.getLastMatchedCount();
 
         source.sendMessage(prefix("Plugins loaded: ", String.valueOf(totalPlugins)));
+        source.sendMessage(prefix("Docker status: ",
+                dockerService.isDockerAvailable()
+                        ? "available"
+                        : dockerService.getDockerUnavailableReason()
+                        .map(reason -> "unavailable - " + reason)
+                        .orElse("unavailable")));
         source.sendMessage(prefix("Docker label filter: ",
                 dockerService.getConfig().autoRegisterLabelKey() + "=" + dockerService.getConfig().autoRegisterLabelValue()));
         source.sendMessage(prefix("Duplicate strategy: ", dockerService.getConfig().duplicateStrategy()));

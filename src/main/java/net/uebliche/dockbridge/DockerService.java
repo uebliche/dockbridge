@@ -13,6 +13,9 @@ import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
 import org.slf4j.Logger;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
 import java.net.InetSocketAddress;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -21,6 +24,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -39,6 +43,10 @@ public final class DockerService {
     private List<Registration> lastRegistrations = List.of();
     private int lastMatchedCount = 0;
     private Instant lastScan = Instant.EPOCH;
+    private boolean dockerAvailable = true;
+    private String dockerUnavailableReason = null;
+    private Instant dockerUnavailableSince = null;
+    private Instant nextDockerRetryAt = Instant.EPOCH;
 
     public DockerService(ProxyServer server, Logger logger, DockBridgeConfig config) {
         this.server = server;
@@ -50,21 +58,27 @@ public final class DockerService {
 
     public void initialize() {
         logger.info("DockerService initialized with endpoint {}", config.dockerEndpoint());
-        try {
-            dockerClient.pingCmd().exec();
-            logger.info("Docker ping successful for endpoint {}", config.dockerEndpoint());
-        } catch (Exception e) {
-            logger.warn("Docker ping failed for endpoint {}: {}", config.dockerEndpoint(), e.getMessage());
-        }
+        ensureDockerReachable(true);
     }
 
     public void refreshContainers() {
+        Instant now = Instant.now();
+        if (shouldSkipDockerAccess(now)) {
+            return;
+        }
+        if (!ensureDockerReachable(false)) {
+            return;
+        }
         if (config.logScan()) {
             logger.info("Scanning Docker for auto-register containers using label {}={}.",
                     config.autoRegisterLabelKey(), config.autoRegisterLabelValue());
         }
-        List<Container> containers = listMatchingContainers();
-        lastScan = Instant.now();
+        ContainerListResult listResult = listMatchingContainers();
+        if (!listResult.success()) {
+            return;
+        }
+        lastScan = now;
+        List<Container> containers = listResult.containers();
         if (containers.isEmpty()) {
             // Unregister anything we had before.
             int unregisteredCount = unregisterMissing(Set.of());
@@ -121,12 +135,13 @@ public final class DockerService {
         }
     }
 
-    private List<Container> listMatchingContainers() {
+    private ContainerListResult listMatchingContainers() {
         try {
             ListContainersCmd cmd = dockerClient.listContainersCmd()
                     .withShowAll(false)
                     .withLabelFilter(Map.of(config.autoRegisterLabelKey(), config.autoRegisterLabelValue()));
             List<Container> result = cmd.exec();
+            markDockerAvailable(false);
             if (result != null && !result.isEmpty() && config.logMatches()) {
                 for (Container c : result) {
                     logger.info("Matched container id={} names={}",
@@ -134,10 +149,10 @@ public final class DockerService {
                             c.getNames() == null ? "[]" : String.join(",", c.getNames()));
                 }
             }
-            return result;
+            return ContainerListResult.success(result == null ? List.of() : result);
         } catch (Exception e) {
-            logger.warn("Docker listContainers call failed (endpoint {}): {}", config.dockerEndpoint(), e.getMessage());
-            return List.of();
+            markDockerUnavailable("listContainers failed: " + summarizeException(e));
+            return ContainerListResult.failure();
         }
     }
 
@@ -286,6 +301,14 @@ public final class DockerService {
         return lastScan;
     }
 
+    public boolean isDockerAvailable() {
+        return dockerAvailable;
+    }
+
+    public Optional<String> getDockerUnavailableReason() {
+        return Optional.ofNullable(dockerUnavailableReason);
+    }
+
     public record Registration(String serverName, String host, int port, String containerId, String baseName) {
     }
 
@@ -418,5 +441,131 @@ public final class DockerService {
     }
 
     private record RegistrationOutcome(Registration registration, RegistrationStatus status) {
+    }
+
+    private record ContainerListResult(List<Container> containers, boolean success) {
+        private static ContainerListResult success(List<Container> containers) {
+            return new ContainerListResult(containers, true);
+        }
+
+        private static ContainerListResult failure() {
+            return new ContainerListResult(List.of(), false);
+        }
+    }
+
+    private boolean shouldSkipDockerAccess(Instant now) {
+        if (dockerAvailable) {
+            return false;
+        }
+        Optional<String> localProblem = describeLocalEndpointProblem();
+        if (localProblem.isPresent()) {
+            markDockerUnavailable(localProblem.get());
+            return true;
+        }
+        if (dockerUnavailableReason != null && dockerUnavailableReason.startsWith("socket ")) {
+            return false;
+        }
+        return now.isBefore(nextDockerRetryAt);
+    }
+
+    private boolean ensureDockerReachable(boolean logSuccessfulPing) {
+        Optional<String> localProblem = describeLocalEndpointProblem();
+        if (localProblem.isPresent()) {
+            markDockerUnavailable(localProblem.get());
+            return false;
+        }
+        if (!config.healthEnablePing()) {
+            markDockerAvailable(false);
+            return true;
+        }
+        try {
+            dockerClient.pingCmd().exec();
+            markDockerAvailable(logSuccessfulPing);
+            if (logSuccessfulPing) {
+                logger.info("Docker ping successful for endpoint {}", config.dockerEndpoint());
+            }
+            return true;
+        } catch (Exception e) {
+            markDockerUnavailable("ping failed: " + summarizeException(e));
+            return false;
+        }
+    }
+
+    private Optional<String> describeLocalEndpointProblem() {
+        String endpoint = config.dockerEndpoint();
+        String prefix = "unix://";
+        if (!endpoint.startsWith(prefix)) {
+            return Optional.empty();
+        }
+        String rawPath = endpoint.substring(prefix.length()).trim();
+        if (rawPath.isEmpty()) {
+            return Optional.of("unix endpoint is missing a socket path");
+        }
+        Path socketPath = Path.of(rawPath);
+        if (Files.exists(socketPath)) {
+            return Optional.empty();
+        }
+        return Optional.of("socket " + socketPath + " does not exist; mount the Docker socket or configure docker.endpoint to a reachable daemon");
+    }
+
+    private void markDockerUnavailable(String reason) {
+        String normalized = normalizeReason(reason);
+        boolean changed = dockerAvailable || !Objects.equals(dockerUnavailableReason, normalized);
+        dockerAvailable = false;
+        if (dockerUnavailableSince == null) {
+            dockerUnavailableSince = Instant.now();
+        }
+        dockerUnavailableReason = normalized;
+        nextDockerRetryAt = Instant.now().plus(retryDelay());
+        if (changed) {
+            String registrationNote = registeredNames.isEmpty()
+                    ? "No Docker-backed servers are currently registered."
+                    : "Keeping " + registeredNames.size() + " previously registered Docker-backed server(s) until the endpoint recovers.";
+            logger.warn("Docker endpoint {} unavailable: {}. {} Retrying in {}s.",
+                    config.dockerEndpoint(),
+                    normalized,
+                    registrationNote,
+                    retryDelay().toSeconds());
+        }
+    }
+
+    private void markDockerAvailable(boolean logSuccessfulPing) {
+        boolean wasUnavailable = !dockerAvailable;
+        if (wasUnavailable) {
+            long downSeconds = dockerUnavailableSince == null
+                    ? 0L
+                    : Math.max(0L, Duration.between(dockerUnavailableSince, Instant.now()).toSeconds());
+            logger.info("Docker endpoint {} reachable again after {}s.",
+                    config.dockerEndpoint(),
+                    downSeconds);
+        } else if (!logSuccessfulPing) {
+            return;
+        }
+        dockerAvailable = true;
+        dockerUnavailableReason = null;
+        dockerUnavailableSince = null;
+        nextDockerRetryAt = Instant.EPOCH;
+    }
+
+    private Duration retryDelay() {
+        long base = Math.max(config.dockerPollIntervalSeconds(), config.healthPingIntervalSeconds());
+        long multiplier = Math.max(1L, config.healthMaxFailures());
+        return Duration.ofSeconds(Math.max(10L, base * multiplier));
+    }
+
+    private String summarizeException(Exception exception) {
+        Throwable current = exception;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        String message = current.getMessage();
+        if (message != null && !message.isBlank()) {
+            return message.trim();
+        }
+        return current.getClass().getSimpleName();
+    }
+
+    private String normalizeReason(String reason) {
+        return reason == null ? "unknown error" : reason.trim().replaceAll("\\s+", " ");
     }
 }
