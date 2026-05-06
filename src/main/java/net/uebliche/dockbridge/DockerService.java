@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -40,6 +41,7 @@ public final class DockerService {
     private final DockerClient dockerClient;
     private final DuplicateStrategy duplicateStrategy;
     private final Set<String> registeredNames = new HashSet<>();
+    private final AtomicBoolean refreshRunning = new AtomicBoolean(false);
     private List<Registration> lastRegistrations = List.of();
     private int lastMatchedCount = 0;
     private Instant lastScan = Instant.EPOCH;
@@ -62,6 +64,17 @@ public final class DockerService {
     }
 
     public void refreshContainers() {
+        if (!refreshRunning.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            refreshContainersLocked();
+        } finally {
+            refreshRunning.set(false);
+        }
+    }
+
+    private void refreshContainersLocked() {
         Instant now = Instant.now();
         if (shouldSkipDockerAccess(now)) {
             return;
