@@ -1,13 +1,33 @@
 import groovy.json.JsonSlurper
+import net.uebliche.mcmeta.McmetaExtension
 import java.net.URL
 
 plugins {
     java
-    id("com.github.johnrengelman.shadow") version "8.1.1"
-    id("xyz.jpenilla.run-velocity") version "2.3.0"
+    id("net.uebliche.mcmeta")
+    id("com.gradleup.shadow") version "9.3.1"
+    id("xyz.jpenilla.run-velocity") version "2.3.1"
 }
 
 group = "net.uebliche.dockbridge"
+
+val requestedMcVersion = listOf(
+    providers.gradleProperty("mcVersion").orNull,
+    providers.gradleProperty("minecraft_version").orNull,
+).firstOrNull { !it.isNullOrBlank() }
+
+extensions.configure<McmetaExtension>("mcmeta") {
+    autoLoad = false
+    if (requestedMcVersion != null) {
+        minecraftVersion = requestedMcVersion
+    }
+    repositories {
+        all()
+    }
+}
+if (requestedMcVersion != null) {
+    extensions.getByType(McmetaExtension::class.java).resolveNow(project)
+}
 
 val buildDirOverride = file("/tmp/dockbridge-build")
 buildDir = buildDirOverride
