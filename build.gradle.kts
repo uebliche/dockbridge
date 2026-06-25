@@ -121,10 +121,10 @@ dependencies {
     annotationProcessor("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
 
     implementation("com.google.code.gson:gson:2.11.0")
-    implementation("com.github.docker-java:docker-java-api:3.3.6")
-    implementation("com.github.docker-java:docker-java-core:3.3.6")
-    implementation("com.github.docker-java:docker-java-transport:3.3.6")
-    implementation("com.github.docker-java:docker-java-transport-zerodep:3.3.6")
+    implementation("com.github.docker-java:docker-java-api:3.7.1")
+    implementation("com.github.docker-java:docker-java-core:3.7.1")
+    implementation("com.github.docker-java:docker-java-transport:3.7.1")
+    implementation("com.github.docker-java:docker-java-transport-zerodep:3.7.1")
 }
 
 tasks.withType<JavaCompile>().configureEach {
