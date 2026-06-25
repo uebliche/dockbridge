@@ -5,7 +5,7 @@ import java.net.URL
 plugins {
     java
     id("net.uebliche.mcmeta")
-    id("com.gradleup.shadow") version "9.3.1"
+    id("com.gradleup.shadow") version "9.4.2"
     id("xyz.jpenilla.run-velocity") version "2.3.1"
 }
 
