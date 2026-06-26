@@ -32,9 +32,12 @@ pluginManagement {
             java.io.File(settingsDir, "../../../mcmeta/gradle-plugin"),
         ).firstOrNull { it.exists() }
     }
-    if (mcmetaPluginDir != null && mcmetaPluginDir.exists()) {
+    val mcmetaPluginAvailable = mcmetaPluginDir != null && mcmetaPluginDir.exists()
+    if (mcmetaPluginAvailable) {
         includeBuild(mcmetaPluginDir.absolutePath)
     }
+    gradle.extra["mcmetaPluginAvailable"] = mcmetaPluginAvailable
+    gradle.extra["mcmetaPluginDir"] = mcmetaPluginDir
     repositories {
         mavenCentral()
         gradlePluginPortal()
