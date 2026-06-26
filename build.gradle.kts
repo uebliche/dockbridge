@@ -1,11 +1,9 @@
 import groovy.json.JsonSlurper
-import net.uebliche.mcmeta.McmetaExtension
 import java.net.URL
 
 plugins {
     java
-    id("net.uebliche.mcmeta")
-    id("com.gradleup.shadow") version "9.3.1"
+    id("com.gradleup.shadow") version "9.4.2"
     id("xyz.jpenilla.run-velocity") version "2.3.1"
 }
 
@@ -16,18 +14,8 @@ val requestedMcVersion = listOf(
     providers.gradleProperty("minecraft_version").orNull,
 ).firstOrNull { !it.isNullOrBlank() }
 
-extensions.configure<McmetaExtension>("mcmeta") {
-    autoLoad = false
-    if (requestedMcVersion != null) {
-        minecraftVersion = requestedMcVersion
-    }
-    repositories {
-        all()
-    }
-}
-if (requestedMcVersion != null) {
-    extensions.getByType(McmetaExtension::class.java).resolveNow(project)
-}
+// The mcmeta plugin is optional for this project build. CI does not have the private/unpublished
+// plugin available, so keep dependency resolution on explicit repositories below.
 
 val buildDirOverride = file("/tmp/dockbridge-build")
 buildDir = buildDirOverride
@@ -120,11 +108,11 @@ dependencies {
     compileOnly("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
     annotationProcessor("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
 
-    implementation("com.google.code.gson:gson:2.11.0")
-    implementation("com.github.docker-java:docker-java-api:3.3.6")
-    implementation("com.github.docker-java:docker-java-core:3.3.6")
-    implementation("com.github.docker-java:docker-java-transport:3.3.6")
-    implementation("com.github.docker-java:docker-java-transport-zerodep:3.3.6")
+    implementation("com.google.code.gson:gson:2.14.0")
+    implementation("com.github.docker-java:docker-java-api:3.7.1")
+    implementation("com.github.docker-java:docker-java-core:3.7.1")
+    implementation("com.github.docker-java:docker-java-transport:3.7.1")
+    implementation("com.github.docker-java:docker-java-transport-zerodep:3.7.1")
 }
 
 tasks.withType<JavaCompile>().configureEach {
