@@ -3,7 +3,7 @@ import java.net.URL
 
 plugins {
     java
-    id("com.gradleup.shadow") version "9.4.2"
+    id("com.gradleup.shadow") version "9.4.3"
     id("xyz.jpenilla.run-velocity") version "2.3.1"
 }
 
