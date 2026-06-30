@@ -29,7 +29,7 @@ public final class DockBridgeCommand implements SimpleCommand {
             return;
         }
 
-        int totalPlugins = server.getPluginManager().getPlugins().size();
+        int totalPlugins = server.pluginManager().plugins().size();
         List<DockerService.Registration> registrations = dockerService.getCurrentRegistrations();
         int matched = dockerService.getLastMatchedCount();
 

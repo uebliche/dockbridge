@@ -95,6 +95,7 @@ private fun resolvedGameVersions(): List<String> {
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://repo.spongepowered.org/repository/maven-public/")
 }
 
 java {

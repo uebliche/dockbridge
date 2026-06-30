@@ -2,9 +2,10 @@ package net.uebliche.dockbridge;
 
 import com.google.inject.Inject;
 import com.velocitypowered.api.event.Subscribe;
-import com.velocitypowered.api.event.connection.PostLoginEvent;
-import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.event.lifecycle.ProxyInitializeEvent;
+import com.velocitypowered.api.event.player.PostLoginEvent;
 import com.velocitypowered.api.plugin.Plugin;
+import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.kyori.adventure.text.Component;
@@ -57,7 +58,7 @@ public final class DockBridgePlugin {
         }
         registerCommands();
         logger.info("Scheduled Docker refresh every {}s.", config.dockerPollIntervalSeconds());
-        server.getScheduler()
+        server.scheduler()
                 .buildTask(this, dockerService::refreshContainers)
                 .delay(Duration.ofSeconds(config.dockerPollIntervalSeconds()))
                 .repeat(Duration.ofSeconds(config.dockerPollIntervalSeconds()))
@@ -66,7 +67,7 @@ public final class DockBridgePlugin {
         String currentVersion = resolveCurrentVersion();
         logger.info("DockBridge starting with version {}.", currentVersion);
 
-        server.getScheduler()
+        server.scheduler()
                 .buildTask(this, () -> runUpdateCheck(currentVersion))
                 .schedule();
     }
@@ -78,8 +79,8 @@ public final class DockBridgePlugin {
             return;
         }
 
-        if (event.getPlayer().hasPermission(UPDATE_NOTIFY_PERMISSION)) {
-            event.getPlayer().sendMessage(Component.text("[DockBridge] A new version is available: " + available));
+        if (event.player().hasPermission(UPDATE_NOTIFY_PERMISSION)) {
+            event.player().sendMessage(Component.text("[DockBridge] A new version is available: " + available));
         }
     }
 
@@ -95,17 +96,14 @@ public final class DockBridgePlugin {
     }
 
     private String resolveCurrentVersion() {
-        return server.getPluginManager()
-                .getPlugin("dockbridge")
-                .flatMap(container -> container.getDescription().getVersion())
-                .orElse("unknown");
+        PluginContainer container = server.pluginManager().getPlugin("dockbridge");
+        return container == null ? "unknown" : container.description().version();
     }
 
     private void registerCommands() {
-        var manager = server.getCommandManager();
+        var manager = server.commandManager();
         manager.register(
-                manager.metaBuilder("dockbridge")
-                        .plugin(this)
+                manager.createMetaBuilder("dockbridge")
                         .build(),
                 new DockBridgeCommand(server, dockerService));
     }
