@@ -176,16 +176,16 @@ public final class DockerService {
         InetSocketAddress address = new InetSocketAddress(host, port);
         ServerInfo info = new ServerInfo(serverName, address);
 
-        Optional<RegisteredServer> existing = server.getServer(serverName);
-        if (existing.isPresent()) {
-            InetSocketAddress existingAddress = existing.get().getServerInfo().getAddress();
+        RegisteredServer existing = server.server(serverName);
+        if (existing != null) {
+            InetSocketAddress existingAddress = (InetSocketAddress) existing.serverInfo().address();
             if (addressesMatch(existingAddress, address)) {
                 ensureTryIncludes(serverName);
                 return new RegistrationOutcome(
                         new Registration(serverName, host, port, shortContainerId(container), baseName),
                         RegistrationStatus.UNCHANGED);
             }
-            server.unregisterServer(existing.get().getServerInfo());
+            server.unregisterServer(existing.serverInfo());
             try {
                 server.registerServer(info);
             } catch (Exception ex) {
@@ -292,7 +292,7 @@ public final class DockerService {
             return true;
         }
         Registration previous = previousByName.get(name);
-        if (server.getServer(name).isPresent()) {
+        if (server.server(name) != null) {
             return previous == null || !previous.containerId().equals(containerKey);
         }
         return false;
@@ -389,12 +389,12 @@ public final class DockerService {
     }
 
     private void unregisterServer(String serverName) {
-        Optional<RegisteredServer> existing = server.getServer(serverName);
-        if (existing.isEmpty()) {
+        RegisteredServer existing = server.server(serverName);
+        if (existing == null) {
             registeredNames.remove(serverName);
             return;
         }
-        server.unregisterServer(existing.get().getServerInfo());
+        server.unregisterServer(existing.serverInfo());
         registeredNames.remove(serverName);
         if (config.logUnregistered()) {
             logger.info("Unregistered server {} (no matching container).", serverName);
@@ -414,7 +414,7 @@ public final class DockerService {
     }
 
     private void ensureTryIncludes(String serverName) {
-        var order = server.getConfiguration().getAttemptConnectionOrder();
+        var order = server.configuration().getAttemptConnectionOrder();
         if (order.contains(serverName)) {
             return;
         }
